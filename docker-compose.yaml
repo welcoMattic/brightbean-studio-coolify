@@ -1,0 +1,171 @@
+# BrightBean Studio (brightbeanxyz/brightbean-studio) sur Coolify, en 1 clic.
+# Lier ce repo public comme application "Docker Compose" dans Coolify.
+#
+# L'amont ne publie pas d'image : migrate, app et worker sont construits sur le
+# serveur à partir du Dockerfile amont, sur un commit épinglé (BRIGHTBEAN_REF).
+# Coolify génère les secrets et l'URL publique via ses magic vars
+# (SERVICE_PASSWORD_*, SERVICE_URL_*, SERVICE_FQDN_*). Voir README.md.
+
+x-brightbean-build: &brightbean-build
+  # Contexte git distant, Dockerfile amont inchangé. Commit complet (40
+  # caractères) : l'amont ne publie ni release ni tag.
+  context: "https://github.com/brightbeanxyz/brightbean-studio.git#${BRIGHTBEAN_REF:-6c56e1f9190fb3e2571ee3f0c1d99b2d818aa9f8}"
+
+x-brightbean-env: &brightbean-env
+  # manage.py charge config.settings.development par défaut : sans cette
+  # ligne, migrate et process_tasks ne tourneraient pas avec les mêmes
+  # réglages que gunicorn.
+  DJANGO_SETTINGS_MODULE: config.settings.production
+  # Secrets générés par Coolify. Ne jamais les régénérer : les identifiants
+  # des plateformes et les jetons OAuth sont chiffrés avec une clé dérivée
+  # des deux.
+  SECRET_KEY: ${SERVICE_PASSWORD_64_SECRETKEY}
+  ENCRYPTION_KEY_SALT: ${SERVICE_PASSWORD_64_ENCRYPTIONSALT}
+  DATABASE_URL: postgres://postgres:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/brightbean
+  # URL publique et hôte autorisé, dérivés du domaine posé sur le service
+  # caddy (Coolify les réconcilie à chaque déploiement). 127.0.0.1 et
+  # localhost servent au healthcheck.
+  APP_URL: ${SERVICE_URL_CADDY}
+  ALLOWED_HOSTS: ${SERVICE_FQDN_CADDY},localhost,127.0.0.1
+  # Borne les arènes malloc de glibc par thread (recommandation amont pour
+  # les déploiements Docker, sinon la mémoire ne redescend jamais).
+  MALLOC_ARENA_MAX: "2"
+  # Médias : volume media_data par défaut, servi par caddy. Passer à s3 pour
+  # un stockage objet (SeaweedFS, R2, etc.), voir README.md.
+  STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+  MEDIA_ROOT: /app/media
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
+  S3_CUSTOM_DOMAIN: ${S3_CUSTOM_DOMAIN:-}
+  S3_REGION_NAME: ${S3_REGION_NAME:-auto}
+  # Emails écrits dans les logs (console) tant qu'EMAIL_BACKEND_TYPE ne vaut
+  # pas smtp : le backend smtp sans serveur ferait échouer chaque envoi
+  # (erreur 500 sur la réinitialisation de mot de passe, par exemple).
+  EMAIL_BACKEND_TYPE: ${EMAIL_BACKEND_TYPE:-console}
+  EMAIL_HOST: ${EMAIL_HOST:-}
+  # STARTTLS uniquement : l'amont ne lit pas EMAIL_USE_SSL (port 465)
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+  EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-noreply@localhost}
+  # Connexion "Continuer avec Google" (distinct de PLATFORM_GOOGLE_*)
+  GOOGLE_AUTH_CLIENT_ID: ${GOOGLE_AUTH_CLIENT_ID:-}
+  GOOGLE_AUTH_CLIENT_SECRET: ${GOOGLE_AUTH_CLIENT_SECRET:-}
+  # Identifiants des plateformes. Ils priment sur ceux saisis par
+  # organisation dans /admin/ (Credentials > Platform credentials).
+  PLATFORM_FACEBOOK_APP_ID: ${PLATFORM_FACEBOOK_APP_ID:-}
+  PLATFORM_FACEBOOK_APP_SECRET: ${PLATFORM_FACEBOOK_APP_SECRET:-}
+  PLATFORM_FACEBOOK_CONFIG_ID: ${PLATFORM_FACEBOOK_CONFIG_ID:-}
+  PLATFORM_INSTAGRAM_APP_ID: ${PLATFORM_INSTAGRAM_APP_ID:-}
+  PLATFORM_INSTAGRAM_APP_SECRET: ${PLATFORM_INSTAGRAM_APP_SECRET:-}
+  PLATFORM_THREADS_APP_ID: ${PLATFORM_THREADS_APP_ID:-}
+  PLATFORM_THREADS_APP_SECRET: ${PLATFORM_THREADS_APP_SECRET:-}
+  PLATFORM_LINKEDIN_PERSONAL_CLIENT_ID: ${PLATFORM_LINKEDIN_PERSONAL_CLIENT_ID:-}
+  PLATFORM_LINKEDIN_PERSONAL_CLIENT_SECRET: ${PLATFORM_LINKEDIN_PERSONAL_CLIENT_SECRET:-}
+  PLATFORM_LINKEDIN_COMPANY_CLIENT_ID: ${PLATFORM_LINKEDIN_COMPANY_CLIENT_ID:-}
+  PLATFORM_LINKEDIN_COMPANY_CLIENT_SECRET: ${PLATFORM_LINKEDIN_COMPANY_CLIENT_SECRET:-}
+  PLATFORM_TIKTOK_CLIENT_KEY: ${PLATFORM_TIKTOK_CLIENT_KEY:-}
+  PLATFORM_TIKTOK_CLIENT_SECRET: ${PLATFORM_TIKTOK_CLIENT_SECRET:-}
+  PLATFORM_GOOGLE_CLIENT_ID: ${PLATFORM_GOOGLE_CLIENT_ID:-}
+  PLATFORM_GOOGLE_CLIENT_SECRET: ${PLATFORM_GOOGLE_CLIENT_SECRET:-}
+  PLATFORM_PINTEREST_APP_ID: ${PLATFORM_PINTEREST_APP_ID:-}
+  PLATFORM_PINTEREST_APP_SECRET: ${PLATFORM_PINTEREST_APP_SECRET:-}
+  # Webhooks entrants : laissés vides, ils sont rejetés
+  FACEBOOK_WEBHOOK_VERIFY_TOKEN: ${FACEBOOK_WEBHOOK_VERIFY_TOKEN:-}
+  INSTAGRAM_LOGIN_WEBHOOK_VERIFY_TOKEN: ${INSTAGRAM_LOGIN_WEBHOOK_VERIFY_TOKEN:-}
+  YOUTUBE_WEBHOOK_SECRET: ${YOUTUBE_WEBHOOK_SECRET:-}
+  # Optionnels : photos Unsplash dans le composer, suivi d'erreurs Sentry
+  UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+
+services:
+  # Point d'entrée public (port 80) : sert les médias publics directement
+  # depuis le volume (requêtes Range, vidéos lisibles dans Safari) et
+  # proxifie le reste vers app. Le domaine se pose sur ce service.
+  caddy:
+    # Image construite depuis le repo : embarque le Caddyfile (les fichiers
+    # du repo ne sont pas montables dans ce build pack).
+    build: ./caddy
+    environment:
+      # Déclare le routage du proxy Coolify vers le port 80 de ce service
+      - SERVICE_FQDN_CADDY_80
+      # /var/empty si STORAGE_BACKEND=s3 : le volume survit au changement et
+      # Caddy servirait sinon les anciens fichiers
+      - CADDY_MEDIA_ROOT=${CADDY_MEDIA_ROOT:-/app/media}
+    volumes:
+      # Lecture seule : Caddy ne doit jamais écrire dans MEDIA_ROOT
+      - media_data:/app/media:ro
+    depends_on:
+      - app
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  # Django (gunicorn, commande du Dockerfile amont : 1 worker, 4 threads)
+  app:
+    build: *brightbean-build
+    environment: *brightbean-env
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  # Tâches de fond (django-background-tasks) : publication programmée,
+  # synchronisation de l'inbox, relances, rappels, nettoyages.
+  worker:
+    build: *brightbean-build
+    command: python manage.py process_tasks
+    environment: *brightbean-env
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  # Job one-shot à chaque déploiement : migrations, puis enregistrement des
+  # tâches récurrentes (hooks post_migrate) que le worker exécute.
+  migrate:
+    build: *brightbean-build
+    command: python manage.py migrate --noinput
+    environment: *brightbean-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Exclu du statut Coolify : il s'arrête (exited) une fois son travail fait
+    exclude_from_hc: true
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
+  postgres:
+    # Majeure épinglée : passer à une autre majeure exige un dump/restore
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: brightbean
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d brightbean"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  media_data:

@@ -1,0 +1,43 @@
+# Caddy derrière le proxy Coolify (Traefik), qui termine TLS.
+{
+	auto_https off
+	servers {
+		# Traefik arrive par le réseau Docker (plage privée). Sans cette
+		# confiance, Caddy réécrit X-Forwarded-Proto en "http" et Django
+		# (SECURE_SSL_REDIRECT) redirige en boucle.
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	encode gzip
+
+	# Refuse les chemins contenant un segment "..", encodé ou non (défense en
+	# profondeur, aucun client légitime n'en envoie). expression plutôt que
+	# path_regexp : les matchers path ne voient que le chemin déjà nettoyé.
+	@dotdot expression `{http.request.uri.path}.matches("(^|/)[.][.](/|$)")`
+	handle @dotdot {
+		respond 400
+	}
+
+	# Médias publics, servis sans occuper gunicorn et avec les requêtes Range
+	# (lecture et avance rapide des vidéos). Même liste que
+	# PUBLIC_MEDIA_PREFIXES dans config/urls.py amont : comment_attachments/
+	# reste derrière la vue Django qui vérifie l'appartenance au workspace.
+	@public_media path /media/media_library/* /media/avatars/* /media/workspaces/icons/*
+	handle @public_media {
+		# Ces réponses ne passent pas par le SecurityMiddleware de Django :
+		# mêmes en-têtes que config/settings/production.py amont.
+		header {
+			X-Content-Type-Options nosniff
+			Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		}
+		uri strip_prefix /media
+		root * {$CADDY_MEDIA_ROOT:/app/media}
+		file_server
+	}
+
+	handle {
+		reverse_proxy app:8000
+	}
+}
