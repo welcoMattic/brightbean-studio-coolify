@@ -20,7 +20,7 @@ C'est la topologie de production recommandée par l'amont (`docker-compose.prod.
 
 ## Prérequis
 
-- Une instance [Coolify](https://coolify.io) v4.x (compose conçu d'après le parseur de la 4.3.23)
+- Une instance [Coolify](https://coolify.io) v4.x (déployé et vérifié sur la 4.3.23)
 - Un serveur amd64 ou arm64 avec `git` installé (Docker va chercher le dépôt amont au moment du build)
 
 ## Déploiement (1 clic)
@@ -31,11 +31,11 @@ C'est la topologie de production recommandée par l'amont (`docker-compose.prod.
 2. URL du repo : `https://github.com/welcoMattic/brightbean-studio-coolify`, branche `main`
 3. Build pack : **Docker Compose** (le compose est à `/docker-compose.yaml`, l'emplacement par défaut)
 4. Domaine du service `caddy` : par exemple `https://brightbean.example.com`. Laissé vide, Coolify en génère un sur le domaine wildcard du serveur.
-5. Deploy. Le premier build (pip, npm, Tailwind) prend quelques minutes, les suivants profitent du cache.
+5. Deploy. Le premier déploiement (pip, npm, Tailwind) prend environ 5 minutes, les suivants profitent du cache.
 
 ### Depuis l'API
 
-Création, domaine et déploiement en un seul appel :
+Création avec le domaine, puis déploiement :
 
 ```bash
 curl -X POST https://<votre-coolify>/api/v1/applications/public \
@@ -50,10 +50,14 @@ curl -X POST https://<votre-coolify>/api/v1/applications/public \
     "git_branch": "main",
     "build_pack": "dockercompose",
     "ports_exposes": "80",
-    "docker_compose_domains": [{"name": "caddy", "domain": "https://brightbean.example.com"}],
-    "instant_deploy": true
+    "docker_compose_domains": [{"name": "caddy", "domain": "https://brightbean.example.com"}]
   }'
+
+curl -X POST "https://<votre-coolify>/api/v1/deploy?uuid=<uuid-retourné>" \
+  -H "Authorization: Bearer <token>"
 ```
+
+Sans déploiement immédiat, Coolify charge d'abord le compose et génère les secrets : on peut vérifier les variables avant le premier build. Si le serveur a plusieurs destinations Docker, ajouter `destination_uuid`.
 
 Pour changer de domaine ensuite : `PATCH /api/v1/applications/<uuid>` avec le même champ `docker_compose_domains`, puis redéployer.
 
@@ -76,7 +80,8 @@ Générées par Coolify, rien à fournir :
 | `SERVICE_PASSWORD_64_ENCRYPTIONSALT` | `ENCRYPTION_KEY_SALT` (dérivation de la clé de chiffrement) |
 | `SERVICE_PASSWORD_POSTGRES` | Mot de passe PostgreSQL |
 | `SERVICE_URL_CADDY` / `SERVICE_FQDN_CADDY` | URL publique (`APP_URL`) et hôte (`ALLOWED_HOSTS`), dérivés du domaine du service `caddy` |
-| `SERVICE_FQDN_CADDY_80` | Déclare le routage du proxy Coolify vers le port 80 de `caddy` |
+
+`SERVICE_FQDN_CADDY_80`, dans le compose, n'est pas une variable : c'est la déclaration qui route le proxy Coolify vers le port 80 de `caddy`.
 
 Toutes les autres sont optionnelles et documentées dans [`.env.example`](./.env.example) : version amont (`BRIGHTBEAN_REF`), SMTP, identifiants des plateformes (`PLATFORM_*`), connexion Google, webhooks, stockage S3, Unsplash, Sentry. Elles se renseignent dans Coolify > Environment Variables, puis Redeploy.
 
@@ -85,7 +90,7 @@ URL de callback OAuth à déclarer chez chaque plateforme : `https://<domaine>/s
 ## Mise à jour
 
 1. Choisir un commit amont sur [brightbeanxyz/brightbean-studio](https://github.com/brightbeanxyz/brightbean-studio/commits/main), SHA complet (40 caractères). L'amont ne publie ni release ni tag.
-2. Coolify > Environment Variables : `BRIGHTBEAN_REF=<sha>` (ou modifier la valeur par défaut dans le compose).
+2. Coolify > Environment Variables : ajouter `BRIGHTBEAN_REF=<sha>` (elle n'apparaît pas d'office, le compose ne l'utilise que dans le contexte de build), ou modifier la valeur par défaut dans le compose.
 3. Redeploy : les images sont reconstruites sur ce commit et `migrate` applique les migrations.
 
 ## Pièges connus
@@ -104,10 +109,10 @@ URL de callback OAuth à déclarer chez chaque plateforme : `https://<domaine>/s
 
 | Volume | Contenu |
 |--------|---------|
-| `postgres_data` | Base PostgreSQL |
-| `media_data` | Médias téléversés (bibliothèque, avatars, pièces jointes) |
+| `<uuid>_postgres-data` | Base PostgreSQL |
+| `<uuid>_media-data` | Médias téléversés (bibliothèque, avatars, pièces jointes) |
 
-Coolify les préfixe avec l'UUID de l'application. Ils survivent aux redéploiements : à sauvegarder avant toute migration ou suppression.
+Coolify les préfixe avec l'UUID de l'application et remplace les `_` des noms du compose par des `-`. Ils survivent aux redéploiements : à sauvegarder avant toute migration ou suppression.
 
 ## Ressources
 
