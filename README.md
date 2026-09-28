@@ -85,7 +85,7 @@ Générées par Coolify, rien à fournir :
 
 `SERVICE_FQDN_CADDY_80`, dans le compose, n'est pas une variable : c'est la déclaration qui route le proxy Coolify vers le port 80 de `caddy`.
 
-Toutes les autres sont optionnelles et documentées dans [`.env.example`](./.env.example) : fermeture des inscriptions (`DISABLE_SIGNUP`), version amont (`BRIGHTBEAN_REF`), SMTP, identifiants des plateformes (`PLATFORM_*`), connexion Google, webhooks, stockage S3, Unsplash, Sentry. Elles se renseignent dans Coolify > Environment Variables, puis Redeploy.
+Toutes les autres sont optionnelles et documentées dans [`.env.example`](./.env.example) : fermeture des inscriptions (`DISABLE_SIGNUP`), version et dépôt construits (`BRIGHTBEAN_REF`, `BRIGHTBEAN_GIT`), SMTP, identifiants des plateformes (`PLATFORM_*`), connexion Google, webhooks, stockage S3, Unsplash, Sentry. Elles se renseignent dans Coolify > Environment Variables, puis Redeploy.
 
 URL de callback OAuth à déclarer chez chaque plateforme : `https://<domaine>/social-accounts/callback/<plateforme>/` (pour TikTok, `social1` au lieu de `tiktok`). Détails par plateforme, webhooks compris, dans la section [Platform Credentials](https://github.com/brightbeanxyz/brightbean-studio#platform-credentials) du README amont.
 
@@ -94,6 +94,8 @@ URL de callback OAuth à déclarer chez chaque plateforme : `https://<domaine>/s
 1. Choisir un commit amont sur [brightbeanxyz/brightbean-studio](https://github.com/brightbeanxyz/brightbean-studio/commits/main), SHA complet (40 caractères). L'amont ne publie ni release ni tag.
 2. Coolify > Environment Variables : ajouter `BRIGHTBEAN_REF=<sha>` (elle n'apparaît pas d'office, le compose ne l'utilise que dans le contexte de build), ou modifier la valeur par défaut dans le compose.
 3. Redeploy : les images sont reconstruites sur ce commit et `migrate` applique les migrations.
+
+Pour tester un correctif pas encore fusionné en amont, construire depuis un fork : `BRIGHTBEAN_GIT=https://github.com/<vous>/brightbean-studio.git` et `BRIGHTBEAN_REF` sur le commit du fork, puis Redeploy. Retirer les deux variables pour revenir à l'amont.
 
 ## Pièges connus
 

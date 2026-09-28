@@ -8,8 +8,9 @@
 
 x-brightbean-build: &brightbean-build
   # Contexte git distant, Dockerfile amont inchangé. Commit complet (40
-  # caractères) : l'amont ne publie ni release ni tag.
-  context: "https://github.com/brightbeanxyz/brightbean-studio.git#${BRIGHTBEAN_REF:-6c56e1f9190fb3e2571ee3f0c1d99b2d818aa9f8}"
+  # caractères) : l'amont ne publie ni release ni tag. BRIGHTBEAN_GIT permet
+  # de construire depuis un fork (tester un correctif avant sa fusion).
+  context: "${BRIGHTBEAN_GIT:-https://github.com/brightbeanxyz/brightbean-studio.git}#${BRIGHTBEAN_REF:-6c56e1f9190fb3e2571ee3f0c1d99b2d818aa9f8}"
 
 x-brightbean-env: &brightbean-env
   # manage.py charge config.settings.development par défaut : sans cette
