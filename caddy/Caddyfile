@@ -20,6 +20,17 @@
 		respond 400
 	}
 
+	# Inscriptions fermées si DISABLE_SIGNUP vaut true (lue au démarrage de
+	# Caddy, donc Redeploy après changement). L'amont n'a pas d'interrupteur :
+	# on coupe l'inscription par formulaire et par compte tiers.
+	@signup_closed {
+		path /accounts/signup /accounts/signup/* /accounts/3rdparty/signup /accounts/3rdparty/signup/* /accounts/social/signup /accounts/social/signup/*
+		expression `"{$DISABLE_SIGNUP:false}" in ["true", "True", "TRUE", "1"]`
+	}
+	handle @signup_closed {
+		respond "Signups are closed on this instance." 403
+	}
+
 	# Médias publics, servis sans occuper gunicorn et avec les requêtes Range
 	# (lecture et avance rapide des vidéos). Même liste que
 	# PUBLIC_MEDIA_PREFIXES dans config/urls.py amont : comment_attachments/

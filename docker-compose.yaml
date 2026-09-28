@@ -95,6 +95,9 @@ services:
       # /var/empty si STORAGE_BACKEND=s3 : le volume survit au changement et
       # Caddy servirait sinon les anciens fichiers
       - CADDY_MEDIA_ROOT=${CADDY_MEDIA_ROOT:-/app/media}
+      # true : ferme les inscriptions (l'amont n'a pas d'interrupteur). À
+      # passer à true une fois votre compte créé, puis Redeploy.
+      - DISABLE_SIGNUP=${DISABLE_SIGNUP:-false}
     volumes:
       # Lecture seule : Caddy ne doit jamais écrire dans MEDIA_ROOT
       - media_data:/app/media:ro

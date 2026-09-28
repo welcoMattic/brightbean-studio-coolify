@@ -70,6 +70,8 @@ Pour changer de domaine ensuite : `PATCH /api/v1/applications/<uuid>` avec le m�
 python manage.py createsuperuser
 ```
 
+3. Fermer les inscriptions une fois votre compte créé : Coolify > Environment Variables, `DISABLE_SIGNUP=true`, puis Redeploy.
+
 ## Variables
 
 Générées par Coolify, rien à fournir :
@@ -83,7 +85,7 @@ Générées par Coolify, rien à fournir :
 
 `SERVICE_FQDN_CADDY_80`, dans le compose, n'est pas une variable : c'est la déclaration qui route le proxy Coolify vers le port 80 de `caddy`.
 
-Toutes les autres sont optionnelles et documentées dans [`.env.example`](./.env.example) : version amont (`BRIGHTBEAN_REF`), SMTP, identifiants des plateformes (`PLATFORM_*`), connexion Google, webhooks, stockage S3, Unsplash, Sentry. Elles se renseignent dans Coolify > Environment Variables, puis Redeploy.
+Toutes les autres sont optionnelles et documentées dans [`.env.example`](./.env.example) : fermeture des inscriptions (`DISABLE_SIGNUP`), version amont (`BRIGHTBEAN_REF`), SMTP, identifiants des plateformes (`PLATFORM_*`), connexion Google, webhooks, stockage S3, Unsplash, Sentry. Elles se renseignent dans Coolify > Environment Variables, puis Redeploy.
 
 URL de callback OAuth à déclarer chez chaque plateforme : `https://<domaine>/social-accounts/callback/<plateforme>/` (pour TikTok, `social1` au lieu de `tiktok`). Détails par plateforme, webhooks compris, dans la section [Platform Credentials](https://github.com/brightbeanxyz/brightbean-studio#platform-credentials) du README amont.
 
@@ -96,7 +98,7 @@ URL de callback OAuth à déclarer chez chaque plateforme : `https://<domaine>/s
 ## Pièges connus
 
 - **Ne jamais régénérer ni supprimer `SERVICE_PASSWORD_64_SECRETKEY` et `SERVICE_PASSWORD_64_ENCRYPTIONSALT`** : les identifiants des plateformes et les jetons OAuth sont chiffrés avec une clé dérivée des deux. Les perdre oblige à reconnecter tous les comptes.
-- **Inscriptions ouvertes** : l'amont n'a pas d'interrupteur pour les fermer, quiconque atteint le domaine peut créer un compte et sa propre organisation. Les invitations passant par la même page d'inscription (jeton en session), le proxy ne peut pas les distinguer d'une inscription libre.
+- **Inscriptions ouvertes par défaut** : l'amont n'a pas d'interrupteur, quiconque atteint le domaine peut créer un compte et sa propre organisation. `DISABLE_SIGNUP=true` les coupe au niveau de Caddy (403 sur l'inscription par formulaire et par compte tiers). Revers : une invitation envoyée à une adresse sans compte n'aboutit pas tant que c'est fermé, l'invité passant par la même page d'inscription. Rouvrir le temps de son inscription, ou créer son compte depuis `/admin/` (une organisation par défaut est créée avec chaque compte), puis l'inviter. Si la connexion Google est configurée (`GOOGLE_AUTH_*`), une première connexion Google crée encore un compte.
 - **Emails écrits dans les logs** tant que `EMAIL_BACKEND_TYPE` ne vaut pas `smtp` : les liens de réinitialisation de mot de passe apparaissent dans les logs du service `app`. En SMTP, seul STARTTLS (port 587) est pris en charge.
 - **Changement de domaine** : `APP_URL` et `ALLOWED_HOSTS` se réconcilient au déploiement suivant, il faut donc redéployer. Seul le premier domaine est pris en compte. Mettre aussi à jour les URL de callback chez chaque plateforme.
 - **Le conteneur `migrate` s'affiche "exited"** : normal, c'est un job one-shot, exclu du statut Coolify (`exclude_from_hc`).
