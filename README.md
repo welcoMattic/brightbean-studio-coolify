@@ -118,6 +118,10 @@ Pour tester un correctif pas encore fusionné en amont, construire depuis un for
 
 Coolify les préfixe avec l'UUID de l'application et remplace les `_` des noms du compose par des `-`. Ils survivent aux redéploiements : à sauvegarder avant toute migration ou suppression.
 
+## Sponsors
+
+Si ce projet vous est utile, vous pouvez soutenir mon travail open source sur [GitHub Sponsors](https://github.com/sponsors/welcoMattic). Les paliers et ce qu'ils financent : [blog.welcomattic.com/sponsors](https://blog.welcomattic.com/sponsors/). À partir du palier Company (100 $ par mois), votre logo et un lien apparaissent ici.
+
 ## Ressources
 
 - Dépôt amont : [brightbeanxyz/brightbean-studio](https://github.com/brightbeanxyz/brightbean-studio) (AGPL-3.0)
